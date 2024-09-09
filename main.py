@@ -8,15 +8,6 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 def send_callback(callback_url, sale_token, client_id, messages):
-    """
-    Отправляем колбек с сообщениями в Sale.
-    
-    Параметры:
-        callback_url (str): URL, куда отправляется ответ.
-        sale_token (str): токен для авторизации в Sale.
-        client_id (str): идентификатор клиента в Sale.
-        messages (list): список сообщений от ChatGPT.
-    """
     headers = {
         "Authorization": f"Bearer {sale_token}",
         "Content-Type": "application/json"
@@ -33,18 +24,6 @@ def send_callback(callback_url, sale_token, client_id, messages):
         logger.error(f"❌ Failed to send callback: {e}")
 
 def stream_chat_completion(client, thread_id, asst_id, message, retries=3):
-    """
-    Отправляем сообщение в существующий тред или создаём новый, используя стриминг ответов.
-
-    Параметры:
-        thread_id (str): уникальный идентификатор треда.
-        asst_id (str): уникальный идентификатор ассистента.
-        message (str): текстовое сообщение от пользователя.
-        retries (int): количество попыток в случае ошибки.
-
-    Возвращает:
-        list: список сообщений от ChatGPT.
-    """
     messages = []
     attempt = 0
 
@@ -78,18 +57,6 @@ def stream_chat_completion(client, thread_id, asst_id, message, retries=3):
                 return []
 
 def main(thread_id, asst_id, gpt_token, sale_token, client_id, callback_url, message):
-    """
-    Основная функция для обработки чата с использованием стриминга и отправки колбека.
-
-    Параметры:
-        thread_id (str): идентификатор треда.
-        asst_id (str): идентификатор ассистента.
-        gpt_token (str): токен для ChatGPT.
-        sale_token (str): токен для системы Sale.
-        client_id (str): идентификатор клиента в системе Sale.
-        callback_url (str): URL для отправки ответа.
-        message (str): текстовое сообщение от пользователя.
-    """
     try:
         client = OpenAI(api_key=gpt_token)
         

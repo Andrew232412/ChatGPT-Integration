@@ -1,5 +1,5 @@
 #!/bin/sh
-'''exec' "/Users/andrew/Documents/Programming/Python tasks/.venv/bin/python3.12" "$0" "$@"
+'''exec' "/Users/andrew/Documents/Programming/ChatGPT integration/.venv/bin/python3.12" "$0" "$@"
 ' '''
 # -*- coding: utf-8 -*-
 import re

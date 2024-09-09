@@ -2,6 +2,7 @@ from openai import OpenAI
 import requests
 import logging
 import time
+import responses
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -50,30 +51,28 @@ def stream_chat_completion(client, thread_id, asst_id, message, retries=3):
     while attempt < retries:
         attempt += 1
         try:
-            # Отправляем запрос с использованием стриминга
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-3.5-turbo",
                 messages=[
                     {"role": "user", "content": message}
                 ],
                 stream=True
             )
             
-            # Стримим сообщения от ChatGPT
             for chunk in response:
                 if chunk.choices[0].delta.content:
                     message_chunk = chunk.choices[0].delta.content
                     messages.append(message_chunk)
-                    print(message_chunk, end="")  # Выводим сообщение в консоль по мере получения
+                    print(message_chunk, end="")
             
             logger.info("🏁 Streaming completed.")
-            return messages  # Если всё прошло успешно, возвращаем результат.
+            return messages
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
             if attempt < retries:
                 logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retries})")
-                time.sleep(2)  # Добавляем задержку перед повторной попыткой.
+                time.sleep(10)
             else:
                 logger.error(f"❌ Failed after {retries} attempts.")
                 return []
@@ -92,13 +91,10 @@ def main(thread_id, asst_id, gpt_token, sale_token, client_id, callback_url, mes
         message (str): текстовое сообщение от пользователя.
     """
     try:
-        # Создаём клиента OpenAI
         client = OpenAI(api_key=gpt_token)
         
-        # Стримим сообщения от ChatGPT
         messages = stream_chat_completion(client, thread_id, asst_id, message)
         
-        # Отправляем список сообщений в Sale через callback URL
         if messages:
             send_callback(callback_url, sale_token, client_id, messages)
         else:
@@ -107,16 +103,20 @@ def main(thread_id, asst_id, gpt_token, sale_token, client_id, callback_url, mes
     except Exception as e:
         logger.error(f"❌ Error in main process: {e}")
 
-# Пример использования
 if __name__ == "__main__":
-    # Примерные входные данные
-    thread_id = "example-thread-id"
-    asst_id = "example-asst-id"
-    gpt_token = "example-gpt-token"
-    sale_token = "example-sale-token"
-    client_id = "example-client-id"
-    callback_url = "https://example.com/callback"
+    thread_id = "mock-thread-id"
+    asst_id = "mock-asst-id"
+    gpt_token = "mock-gpt-token"
+    sale_token = "mock-sale-token"
+    client_id = "mock-client-id"
+    callback_url = "https://httpbin.org/post"
     message = "Пример сообщения для ассистента"
 
-    # Запуск главной функции
-    main(thread_id, asst_id, gpt_token, sale_token, client_id, callback_url, message)
+    with responses.RequestsMock() as rsps:
+        rsps.add(responses.POST, "https://api.openai.com/v1/chat/completions", 
+                 json={"choices": [{"delta": {"content": "Test response"}}]}, 
+                 status=200)
+        
+        rsps.add(responses.POST, callback_url, json={"status": "success"}, status=200)
+        
+        main(thread_id, asst_id, gpt_token, sale_token, client_id, callback_url, message)

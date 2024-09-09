@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/Users/andrew/Documents/Programming/Python tasks/.venv"
+set -gx VIRTUAL_ENV "/Users/andrew/Documents/Programming/ChatGPT integration/.venv"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

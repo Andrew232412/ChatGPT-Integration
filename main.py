@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import openai
 import requests
@@ -8,7 +8,7 @@ import time
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-CALLBACK_URL = "https://webhook.site/cd3aa6b0-97b2-4fe8-a071-d58a33b165f0"  # Replace with real URL
+CALLBACK_URL = "https://webhook.site/cd3aa6b0-97b2-4fe8-a071-d58a33b165f0"  # Замени на реальный URL
 
 app = FastAPI()
 
@@ -20,14 +20,13 @@ class ChatRequest(BaseModel):
     client_id: str
     message: str
 
-def send_callback(callback_url, sale_token, client_id, thread_id, messages):
+def send_callback(callback_url, sale_token, client_id, messages):
     headers = {
         "Authorization": f"Bearer {sale_token}",
         "Content-Type": "application/json"
     }
     data = {
         "client_id": client_id,
-        "thread_id": thread_id,
         "messages": messages
     }
     logger.info(f"Sending data to callback URL: {callback_url}, data: {data}")
@@ -38,7 +37,23 @@ def send_callback(callback_url, sale_token, client_id, thread_id, messages):
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Failed to send callback: {e}")
 
-def stream_chat_completion(api_key, message, retries=3):
+def create_new_thread(api_key, asst_id, message):
+    openai.api_key = api_key
+    try:
+        response = openai.beta.threads.create(
+            messages=[
+                {"role": "user", "content": message}
+            ],
+            model="gpt-4o-mini"
+        )
+        thread_id = response.id
+        logger.info(f"✅ New thread created with ID: {thread_id}")
+        return thread_id
+    except Exception as e:
+        logger.error(f"❌ Error creating new thread: {e}")
+        return None
+
+def stream_chat_completion(api_key, thread_id, asst_id, message, retries=3):
     openai.api_key = api_key
     messages = []
     attempt = 0
@@ -46,18 +61,28 @@ def stream_chat_completion(api_key, message, retries=3):
     while attempt < retries:
         attempt += 1
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",  # Use a valid model
-                messages=[
+            # Если тред уже существует, продолжаем диалог
+            response = openai.beta.threads.runs.create(
+                thread_id=thread_id,
+                assistant_id=asst_id,
+                additional_messages=[
                     {"role": "user", "content": message}
-                ]
+                ],
+                model="gpt-4o-mini"
             )
             
-            message_chunk = response.choices[0].message['content'].strip()
-            messages.append(message_chunk)
-            print(message_chunk)
+            # Ожидание завершения выполнения
+            while response.status != "completed":
+                response = openai.beta.threads.runs.retrieve(
+                    thread_id=thread_id, run_id=response.id
+                )
+                time.sleep(1)
             
-            logger.info("🏁 Streaming completed.")
+            message_response = openai.beta.threads.messages.list(thread_id=thread_id)
+            message_chunk = message_response.data[0].content[0].text.value.strip()
+            messages.append(message_chunk)
+            logger.info(f"🏁 Received message chunk: {message_chunk}")
+            
             return ''.join(messages)
         
         except Exception as e:
@@ -72,17 +97,15 @@ def stream_chat_completion(api_key, message, retries=3):
 @app.post("/chat")
 def chat_endpoint(req: ChatRequest):
     try:
-        # If thread_id is not provided, generate a new thread ID
-        if req.thread_id is None:
-            req.thread_id = "new-thread-id"  # This should be replaced with your actual logic to create a thread
-            logger.info(f"Created new thread with ID: {req.thread_id}")
-        else:
-            logger.info(f"Using existing thread with ID: {req.thread_id}")
+        # Проверяем, если тред не передан, возвращаем ошибку
+        if not req.thread_id:
+            logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
+            raise HTTPException(status_code=400, detail="thread_id must be provided")
 
-        messages = stream_chat_completion(req.gpt_token, req.message)
+        messages = stream_chat_completion(req.gpt_token, req.thread_id, req.asst_id, req.message)
 
         if messages:
-            send_callback(CALLBACK_URL, req.sale_token, req.client_id, req.thread_id, messages)
+            send_callback(CALLBACK_URL, req.sale_token, req.client_id, messages)
         else:
             logger.error("⚠️ No messages received from ChatGPT")
 
@@ -90,7 +113,7 @@ def chat_endpoint(req: ChatRequest):
     
     except Exception as e:
         logger.error(f"❌ Error in chat_endpoint: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

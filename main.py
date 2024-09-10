@@ -1,11 +1,24 @@
-from openai import OpenAI
+from fastapi import FastAPI
+from pydantic import BaseModel
+import openai
 import requests
 import logging
 import time
-import responses
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+CALLBACK_URL = "https://webhook.site/cd3aa6b0-97b2-4fe8-a071-d58a33b165f0"  # Замени на реальный URL
+
+app = FastAPI()
+
+class ChatRequest(BaseModel):
+    thread_id: str = None
+    asst_id: str
+    gpt_token: str
+    sale_token: str
+    client_id: str
+    message: str
 
 def send_callback(callback_url, sale_token, client_id, messages):
     headers = {
@@ -16,6 +29,7 @@ def send_callback(callback_url, sale_token, client_id, messages):
         "client_id": client_id,
         "messages": messages
     }
+    logger.info(f"Sending data to callback URL: {callback_url}, data: {data}") ## вывод в консоль для проверки
     try:
         response = requests.post(callback_url, json=data, headers=headers)
         response.raise_for_status()
@@ -23,29 +37,27 @@ def send_callback(callback_url, sale_token, client_id, messages):
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Failed to send callback: {e}")
 
-def stream_chat_completion(client, thread_id, asst_id, message, retries=3):
+def stream_chat_completion(api_key, thread_id, asst_id, message, retries=3):
+    openai.api_key = api_key
     messages = []
     attempt = 0
 
     while attempt < retries:
         attempt += 1
         try:
-            response = client.chat.completions.create(
+            response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "user", "content": message}
-                ],
-                stream=True
+                ]
             )
             
-            for chunk in response:
-                if chunk.choices[0].delta.content:
-                    message_chunk = chunk.choices[0].delta.content
-                    messages.append(message_chunk)
-                    print(message_chunk, end="")
+            message_chunk = response.choices[0].message['content'].strip()
+            messages.append(message_chunk)
+            print(message_chunk)
             
             logger.info("🏁 Streaming completed.")
-            return messages
+            return ''.join(messages)
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
@@ -54,36 +66,31 @@ def stream_chat_completion(client, thread_id, asst_id, message, retries=3):
                 time.sleep(10)
             else:
                 logger.error(f"❌ Failed after {retries} attempts.")
-                return []
+                return ''
 
-def main(thread_id, asst_id, gpt_token, sale_token, client_id, callback_url, message):
+@app.post("/chat")
+def chat_endpoint(req: ChatRequest):
     try:
-        client = OpenAI(api_key=gpt_token)
-        
-        messages = stream_chat_completion(client, thread_id, asst_id, message)
-        
+        # Если thread_id не предоставлен, создаем новый тред
+        if req.thread_id is None:
+            req.thread_id = create_thread()
+            logger.info(f"Created new thread with ID: {req.thread_id}")
+        else:
+            logger.info(f"Using existing thread with ID: {req.thread_id}")
+
+        messages = stream_chat_completion(req.gpt_token, req.thread_id, req.asst_id, req.message)
+
         if messages:
-            send_callback(callback_url, sale_token, client_id, messages)
+            send_callback(CALLBACK_URL, req.sale_token, req.client_id, messages)
         else:
             logger.error("⚠️ No messages received from ChatGPT")
+
+        return {"status": "success"}
     
     except Exception as e:
-        logger.error(f"❌ Error in main process: {e}")
+        logger.error(f"❌ Error in chat_endpoint: {e}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
-    thread_id = "mock-thread-id"
-    asst_id = "mock-asst-id"
-    gpt_token = "mock-gpt-token"
-    sale_token = "mock-sale-token"
-    client_id = "mock-client-id"
-    callback_url = "https://httpbin.org/post"
-    message = "Пример сообщения для ассистента"
-
-    with responses.RequestsMock() as rsps:
-        rsps.add(responses.POST, "https://api.openai.com/v1/chat/completions", 
-                 json={"choices": [{"delta": {"content": "Test response"}}]}, 
-                 status=200)
-        
-        rsps.add(responses.POST, callback_url, json={"status": "success"}, status=200)
-        
-        main(thread_id, asst_id, gpt_token, sale_token, client_id, callback_url, message)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

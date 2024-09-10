@@ -4,23 +4,26 @@ import openai
 import requests
 import logging
 import time
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+GPT_TOKEN = os.getenv('GPT_TOKEN')
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-GPT_TOKEN = "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"
-
 app = FastAPI()
 
 class ChatRequest(BaseModel):
-    thread_id: str = None
+    thread_id: str
     asst_id: str
     api_key: str
     sale_token: str
     client_id: int
     message: str
 
-def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_status, open_ai_error=None):
+def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_status, open_ai_error):
     headers = {
         "Authorization": f"Bearer {sale_token}",
         "Content-Type": "application/json"
@@ -31,17 +34,16 @@ def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_sta
         "open_ai_status": open_ai_status,
         "open_ai_error": open_ai_error
     }
-    logger.info(f"Sending callback to {callback_url}")
-    
+    logger.info(f"Sending data to callback URL: {callback_url}")
     try:
         response = requests.post(callback_url, json=data, headers=headers)
         response.raise_for_status()
-        logger.info(f"✅ Callback was successfully sent to {callback_url}")
+        logger.info(f"✅ Callback sent successfully to {callback_url}")
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Failed to send callback: {e}")
 
-def stream_chat_completion(api_key, thread_id, asst_id, message, retries=3):
-    openai.api_key = api_key
+def stream_chat_completion(thread_id, asst_id, message, retries=3):
+    openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
 
@@ -66,49 +68,32 @@ def stream_chat_completion(api_key, thread_id, asst_id, message, retries=3):
             message_response = openai.beta.threads.messages.list(thread_id=thread_id)
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
-            
             return ''.join(messages)
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
             if attempt < retries:
+                logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retries})")
                 time.sleep(0.5)
             else:
-                logger.error(f"❌ Failed after {retries} attempts.")
-                return None
+                return '', str(e)
 
 @app.post("/chat")
 def chat_endpoint(req: ChatRequest):
-    try:
-        if not req.thread_id:
-            logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
-            raise HTTPException(status_code=400, detail="thread_id must be provided")
+    if not req.thread_id:
+        logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
+        raise HTTPException(status_code=400, detail="thread_id must be provided")
 
-        open_ai_text = stream_chat_completion(GPT_TOKEN, req.thread_id, req.asst_id, req.message)
+    messages, error = stream_chat_completion(req.api_key, req.thread_id, req.asst_id, req.message)
 
-        if open_ai_text:
-            send_callback(
-                f"https://chatter.salebot.pro/api/{req.api_key}/callback",
-                req.sale_token,
-                req.client_id,
-                open_ai_text,
-                "ok"
-            )
-        else:
-            send_callback(
-                f"https://chatter.salebot.pro/api/{req.api_key}/callback",
-                req.sale_token,
-                req.client_id,
-                "",
-                "error",
-                "No messages received from GPT-4"
-            )
+    if messages:
+        callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
+        send_callback(callback_url, req.sale_token, req.client_id, messages, "ok", "")
+    else:
+        callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
+        send_callback(callback_url, req.sale_token, req.client_id, "", "error", error)
 
-        return {"status": "success"}
-    
-    except Exception as e:
-        logger.error(f"❌ Error in chat_endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "success"}
 
 if __name__ == "__main__":
     import uvicorn

@@ -22,13 +22,15 @@ class ChatRequest(BaseModel):
     sale_token: str
     client_id: int
     message: str
+    callback_text: str
 
-def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_status, open_ai_error):
+def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text):
     headers = {
         "Authorization": f"Bearer {sale_token}",
         "Content-Type": "application/json"
     }
     data = {
+        "message": callback_text,
         "client_id": client_id,
         "open_ai_text": open_ai_text,
         "open_ai_status": open_ai_status,
@@ -84,14 +86,14 @@ def chat_endpoint(req: ChatRequest):
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
         raise HTTPException(status_code=400, detail="thread_id must be provided")
 
-    messages, error = stream_chat_completion(req.api_key, req.thread_id, req.asst_id, req.message)
+    messages, error = stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
+    callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
+    
     if messages:
-        callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
-        send_callback(callback_url, req.sale_token, req.client_id, messages, "ok", "")
+        send_callback(callback_url, req.sale_token, req.client_id, messages, "ok", "", req.callback_text)
     else:
-        callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
-        send_callback(callback_url, req.sale_token, req.client_id, "", "error", error)
+        send_callback(callback_url, req.sale_token, req.client_id, "", "error", error, req.callback_text)
 
     return {"status": "success"}
 

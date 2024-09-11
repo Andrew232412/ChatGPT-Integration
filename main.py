@@ -10,8 +10,6 @@ import os
 load_dotenv()
 GPT_TOKEN = os.getenv('GPT_TOKEN')
 
-print(f"Loaded GPT_TOKEN: {GPT_TOKEN}")
-
 if GPT_TOKEN is None:
     raise RuntimeError("GPT_TOKEN is not set in .env file")
 
@@ -49,7 +47,7 @@ def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_sta
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Failed to send callback: {e}")
 
-def stream_chat_completion(thread_id, asst_id, message, retries=3):
+def stream_chat_completion(thread_id, asst_id, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
@@ -61,7 +59,7 @@ def stream_chat_completion(thread_id, asst_id, message, retries=3):
                 thread_id=thread_id,
                 assistant_id=asst_id,
                 additional_messages=[
-                    {"role": "user", "content": message}
+                    {"role": "user", "content": "Запрос от клиента"}
                 ],
                 model="gpt-4o-mini"
             )
@@ -75,7 +73,7 @@ def stream_chat_completion(thread_id, asst_id, message, retries=3):
             message_response = openai.beta.threads.messages.list(thread_id=thread_id)
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
-            return ''.join(messages), None
+            return ''.join(messages)
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
@@ -91,14 +89,14 @@ def chat_endpoint(req: ChatRequest):
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
         raise HTTPException(status_code=400, detail="thread_id must be provided")
 
-    messages, error = stream_chat_completion(req.thread_id, req.asst_id, req.message)
+    gpt_response, error = stream_chat_completion(req.thread_id, req.asst_id)
 
     callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
     
-    if messages:
-        send_callback(callback_url, req.sale_token, req.client_id, messages, "ok", "", req.callback_text)
+    if gpt_response:
+        send_callback(callback_url, req.sale_token, req.client_id, gpt_response, "ok", "", req.message)
     else:
-        send_callback(callback_url, req.sale_token, req.client_id, "", "error", error, req.callback_text)
+        send_callback(callback_url, req.sale_token, req.client_id, "", "error", error, req.message)
 
     return {"status": "success"}
 

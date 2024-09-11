@@ -10,6 +10,8 @@ import os
 load_dotenv()
 GPT_TOKEN = os.getenv('GPT_TOKEN')
 
+print(f"Loaded GPT_TOKEN: {GPT_TOKEN}")
+
 if GPT_TOKEN is None:
     raise RuntimeError("GPT_TOKEN is not set in .env file")
 

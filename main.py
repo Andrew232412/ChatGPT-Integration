@@ -10,6 +10,9 @@ import os
 load_dotenv()
 GPT_TOKEN = os.getenv('GPT_TOKEN')
 
+if GPT_TOKEN is None:
+    raise RuntimeError("GPT_TOKEN is not set in .env file")
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 

@@ -75,7 +75,7 @@ def stream_chat_completion(thread_id, asst_id, message, retries=3):
             message_response = openai.beta.threads.messages.list(thread_id=thread_id)
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
-            return ''.join(messages)
+            return ''.join(messages), None
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")

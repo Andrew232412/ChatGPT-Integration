@@ -107,7 +107,7 @@ def chat_endpoint(req: ChatRequest):
 
     gpt_response, error = stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
-    callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
+    callback_url = f"https://soboai.ru/api/{req.api_key}/callback"
     
     if gpt_response:
         send_callback(callback_url, req.sale_token, req.client_id, gpt_response, "ok", "", req.callback_text)

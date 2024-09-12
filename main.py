@@ -41,7 +41,7 @@ def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_sta
     }
     logger.info(f"Sending data to callback URL: {callback_url}")
     try:
-        response = requests.post(callback_url, json=data, headers=headers)
+        response = requests.post(callback_url, json=data, headers=headers, timeout=30)
         response.raise_for_status()
         logger.info(f"✅ Callback sent successfully to {callback_url}")
     except requests.exceptions.RequestException as e:
@@ -61,7 +61,8 @@ def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 additional_messages=[
                     {"role": "user", "content": user_message}
                 ],
-                model="gpt-4o-mini"
+                model="gpt-4o-mini",
+                timeout=30
             )
             
             while response.status != "completed":

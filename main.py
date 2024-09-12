@@ -99,7 +99,7 @@ def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             else:
                 return '', str(e)
 
-@app.post("/chat")
+@app.post("/")
 def chat_endpoint(req: ChatRequest):
     if not req.thread_id:
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")

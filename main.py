@@ -47,7 +47,7 @@ def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_sta
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Failed to send callback: {e}")
 
-def stream_chat_completion(thread_id, asst_id, retries=3):
+def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
@@ -59,7 +59,7 @@ def stream_chat_completion(thread_id, asst_id, retries=3):
                 thread_id=thread_id,
                 assistant_id=asst_id,
                 additional_messages=[
-                    {"role": "user", "content": "Запрос от клиента"}
+                    {"role": "user", "content": user_message}
                 ],
                 model="gpt-4o-mini"
             )
@@ -89,7 +89,7 @@ def chat_endpoint(req: ChatRequest):
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
         raise HTTPException(status_code=400, detail="thread_id must be provided")
 
-    gpt_response, error = stream_chat_completion(req.thread_id, req.asst_id)
+    gpt_response, error = stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
     callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
     

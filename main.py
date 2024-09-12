@@ -94,9 +94,9 @@ def chat_endpoint(req: ChatRequest):
     callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
     
     if gpt_response:
-        send_callback(callback_url, req.sale_token, req.client_id, gpt_response, "ok", "", req.message)
+        send_callback(callback_url, req.sale_token, req.client_id, gpt_response, "ok", "", req.callback_text)
     else:
-        send_callback(callback_url, req.sale_token, req.client_id, "", "error", error, req.message)
+        send_callback(callback_url, req.sale_token, req.client_id, "", "error", error, req.callback_text)
 
     return {"status": "success"}
 

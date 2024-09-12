@@ -47,6 +47,21 @@ def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_sta
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Failed to send callback: {e}")
 
+        error_data = {
+            "message": callback_text, 
+            "client_id": client_id,
+            "open_ai_text": "",
+            "open_ai_status": "error",
+            "open_ai_error": f"Callback failed due to: {e}" 
+        }
+        
+        try:
+            error_response = requests.post(callback_url, json=error_data, headers=headers, timeout=30)
+            error_response.raise_for_status()
+            logger.info(f"✅ Error callback sent successfully to {callback_url}")
+        except requests.exceptions.RequestException as retry_exception:
+            logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
+
 def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []

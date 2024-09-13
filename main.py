@@ -3,9 +3,9 @@ from pydantic import BaseModel
 import openai
 import requests
 import logging
-import time
 from dotenv import load_dotenv
 import os
+import asyncio
 
 load_dotenv()
 GPT_TOKEN = os.getenv('GPT_TOKEN')
@@ -26,7 +26,7 @@ class ChatRequest(BaseModel):
     message: str
     callback_text: str
 
-def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text):
+async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -61,7 +61,7 @@ def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status
         except requests.exceptions.RequestException as retry_exception:
             logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
 
-def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
+async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
@@ -83,37 +83,48 @@ def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 response = openai.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response.id
                 )
-                time.sleep(1)
+                await asyncio.sleep(1)
             
             message_response = openai.beta.threads.messages.list(thread_id=thread_id)
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
+
+            # Печатаем, что получили ответ от GPT
+            print(f"Received GPT message chunk: {message_chunk}")
+
             return ''.join(messages), None
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
             if attempt < retries:
                 logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retries})")
-                time.sleep(0.5)
+                await asyncio.sleep(0.5)
             else:
                 return '', str(e)
 
 @app.post("/")
-def chat_endpoint(req: ChatRequest):
+async def chat_endpoint(req: ChatRequest):
     if not req.thread_id:
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
         raise HTTPException(status_code=400, detail="thread_id must be provided")
 
-    gpt_response, error = stream_chat_completion(req.thread_id, req.asst_id, req.message)
+    asyncio.create_task(process_request(req))
+    return {"status": "ok", "message": "Processing started"}
+
+async def process_request(req: ChatRequest):
+    gpt_response, error = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
     callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
+
+    # Печатаем ответ от GPT и детали для отправки колбека
+    print(f"GPT Response: {gpt_response}")
+    print(f"Callback Text: {req.callback_text}")
+    print(f"Error: {error if error else 'No error'}")
     
     if gpt_response:
-        send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text)
+        await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text)
     else:
-        send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text)
-
-    return {"status": "success"}
+        await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text)
 
 if __name__ == "__main__":
     import uvicorn

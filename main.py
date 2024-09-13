@@ -22,14 +22,13 @@ class ChatRequest(BaseModel):
     thread_id: str
     asst_id: str
     api_key: str
-    sale_token: str
     client_id: int
     message: str
     callback_text: str
 
-def send_callback(callback_url, sale_token, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text):
+def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text):
     headers = {
-        "Authorization": f"Bearer {sale_token}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     data = {
@@ -110,9 +109,9 @@ def chat_endpoint(req: ChatRequest):
     callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
     
     if gpt_response:
-        send_callback(callback_url, req.sale_token, req.client_id, gpt_response, "ok", "", req.callback_text)
+        send_callback(callback_url, req.client_id, gpt_response, "ok", "", req.callback_text)
     else:
-        send_callback(callback_url, req.sale_token, req.client_id, "", "error", error, req.callback_text)
+        send_callback(callback_url, req.client_id, "", "error", error, req.callback_text)
 
     return {"status": "success"}
 

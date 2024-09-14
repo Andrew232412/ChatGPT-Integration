@@ -26,7 +26,7 @@ class ChatRequest(BaseModel):
     message: str
     callback_text: str
 
-async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text):
+async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text, total_tokens):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -36,7 +36,8 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         "client_id": client_id,
         "open_ai_text": open_ai_text,
         "open_ai_status": open_ai_status,
-        "open_ai_error": open_ai_error
+        "open_ai_error": open_ai_error,
+        "total_tokens": total_tokens
     }
     logger.info(f"Sending data to callback URL: {callback_url}")
     try:
@@ -51,7 +52,8 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
             "client_id": client_id,
             "open_ai_text": "",
             "open_ai_status": "error",
-            "open_ai_error": f"Callback failed due to: {e}" 
+            "open_ai_error": f"Callback failed due to: {e}",
+             "total_tokens": total_tokens
         }
         
         try:
@@ -65,6 +67,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
+    total_tokens = 0
 
     while attempt < retries:
         attempt += 1
@@ -78,7 +81,9 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 model="gpt-4o-mini",
                 timeout=30
             )
-            
+
+            total_tokens = response['usage']['total_tokens']
+
             while response.status != "completed":
                 response = openai.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response.id
@@ -89,10 +94,10 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
 
-            # Печатаем, что получили ответ от GPT
+            # Печатаем, что получили ответ от GPT НАДО УДАЛИТЬ
             print(f"Received GPT message chunk: {message_chunk}")
 
-            return ''.join(messages), None
+            return ''.join(messages), None, total_tokens
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
@@ -112,19 +117,19 @@ async def chat_endpoint(req: ChatRequest):
     return {"status": "ok", "message": "Processing started"}
 
 async def process_request(req: ChatRequest):
-    gpt_response, error = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
+    gpt_response, error, total_tokens = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
     callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
-    # Печатаем ответ от GPT и детали для отправки колбека
+    # Печатаем ответ от GPT и детали для отправки колбека НАДО УДАЛИТЬ
     print(f"GPT Response: {gpt_response}")
     print(f"Callback Text: {req.callback_text}")
     print(f"Error: {error if error else 'No error'}")
     
     if gpt_response:
-        await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text)
+        await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text, total_tokens)
     else:
-        await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text)
+        await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text, total_tokens)
 
 if __name__ == "__main__":
     import uvicorn

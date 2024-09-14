@@ -98,10 +98,19 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
 
-            total_tokens = response.usage['total_tokens'] if 'usage' in response else 0
+            if hasattr(response, 'usage'):
+                usage_data = response.usage
+                prompt_tokens = usage_data.get('prompt_tokens', 0)
+                completion_tokens = usage_data.get('completion_tokens', 0)
+                total_tokens = usage_data.get('total_tokens', 0)
+            else:
+                prompt_tokens = 0
+                completion_tokens = 0
+                total_tokens = 0         
+                   
             print(f"Total tokens spent: {total_tokens}")
 
-            return ''.join(messages), None, total_tokens
+            return ''.join(messages), None, 0
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")

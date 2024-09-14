@@ -65,12 +65,10 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         except requests.exceptions.RequestException as retry_exception:
             logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
 
-async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
+async def stream_chat_completion(thread_id, asst_id, user_message, total_tokens, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
-    total_tokens = 0 
-
     try:
         openai.beta.threads.retrieve(thread_id=thread_id)
     except Exception as e:
@@ -87,7 +85,8 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                     {"role": "user", "content": user_message}
                 ],
                 model="gpt-4o-mini",
-                timeout=30
+                timeout=30,
+                # max_completion_tokens=4096 
             )
 
             while response.status != "completed":
@@ -99,6 +98,8 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             message_response = openai.beta.threads.messages.list(thread_id=thread_id)
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
+
+            total_tokens = response['usage']['total_tokens']
 
             return ''.join(messages), None, total_tokens
         

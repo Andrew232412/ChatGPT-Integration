@@ -71,14 +71,15 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     attempt = 0
     total_tokens = 0 
 
+    try:
+        openai.beta.threads.retrieve(thread_id=thread_id)
+    except Exception as e:
+        logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
+        return '', f"No thread found with id {thread_id}", total_tokens
+
     while attempt < retries:
         attempt += 1
         try:
-            try:
-                openai.beta.threads.retrieve(thread_id=thread_id)
-            except openai.BadRequestError:
-                raise ValueError("Thread ID does not exist")
-
             response = openai.beta.threads.runs.create(
                 thread_id=thread_id,
                 assistant_id=asst_id,
@@ -88,10 +89,6 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 model="gpt-4o-mini",
                 timeout=30
             )
-
-            total_tokens = response['usage']['total_tokens']
-            if total_tokens > TOKEN_LIMIT:
-                raise ValueError(f"Token limit exceeded: {total_tokens} tokens used, limit is {TOKEN_LIMIT}")
 
             while response.status != "completed":
                 response = openai.beta.threads.runs.retrieve(
@@ -123,14 +120,23 @@ async def chat_endpoint(req: ChatRequest):
     return {"status": "ok", "message": "Processing started"}
 
 async def process_request(req: ChatRequest):
-    gpt_response, error, total_tokens = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
+    try:
+        gpt_response, error, total_tokens = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
-    callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
+        callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
-    if gpt_response:
-        await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text, total_tokens)
-    else:
-        await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text, total_tokens)
+        if total_tokens > TOKEN_LIMIT:
+            error_message = f"Token limit exceeded: {total_tokens} tokens (limit is {TOKEN_LIMIT})"
+            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error_message, req.callback_text, total_tokens)
+            return
+
+        if gpt_response:
+            await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text, total_tokens)
+        else:
+            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text, total_tokens)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+
 
 if __name__ == "__main__":
     import uvicorn

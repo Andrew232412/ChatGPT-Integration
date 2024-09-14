@@ -69,6 +69,17 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     attempt = 0
     total_tokens = 0
 
+    try:
+        openai.beta.threads.retrieve(thread_id=thread_id)
+        logger.info(f"Thread {thread_id} exists.")
+    except openai.error.InvalidRequestError as e:
+        if 'No thread found with id' in str(e):
+            thread_response = openai.beta.threads.create(assistant_id=asst_id)
+            thread_id = thread_response.id
+            logger.info(f"Created new thread with ID: {thread_id}")
+        else:
+            raise e
+
     while attempt < retries:
         attempt += 1
         try:
@@ -82,7 +93,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 timeout=30
             )
 
-            total_tokens = response['usage']['total_tokens']
+            total_tokens = response.usage.total_tokens
 
             while response.status != "completed":
                 response = openai.beta.threads.runs.retrieve(

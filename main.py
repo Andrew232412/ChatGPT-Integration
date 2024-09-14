@@ -67,18 +67,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
-    total_tokens = 0
-
-    try:
-        openai.beta.threads.retrieve(thread_id=thread_id)
-        logger.info(f"Thread {thread_id} exists.")
-    except openai.error.InvalidRequestError as e:
-        if 'No thread found with id' in str(e):
-            thread_response = openai.beta.threads.create(assistant_id=asst_id)
-            thread_id = thread_response.id
-            logger.info(f"Created new thread with ID: {thread_id}")
-        else:
-            raise e
+    total_tokens = 0 
 
     while attempt < retries:
         attempt += 1
@@ -92,9 +81,8 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 model="gpt-4o-mini",
                 timeout=30
             )
-            print(response['usage']['total_tokens'])
-            total_tokens = response['usage'].get('total_tokens', 0) if 'usage' in response else 0
-            
+
+            total_tokens = response['usage']['total_tokens']
 
             while response.status != "completed":
                 response = openai.beta.threads.runs.retrieve(
@@ -105,9 +93,6 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             message_response = openai.beta.threads.messages.list(thread_id=thread_id)
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
-
-            # Печатаем, что получили ответ от GPT НАДО УДАЛИТЬ
-            print(f"Received GPT message chunk: {message_chunk}")
 
             return ''.join(messages), None, total_tokens
         
@@ -133,11 +118,6 @@ async def process_request(req: ChatRequest):
 
     callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
-    # Печатаем ответ от GPT и детали для отправки колбека НАДО УДАЛИТЬ
-    print(f"GPT Response: {gpt_response}")
-    print(f"Callback Text: {req.callback_text}")
-    print(f"Error: {error if error else 'No error'}")
-    
     if gpt_response:
         await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text, total_tokens)
     else:

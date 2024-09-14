@@ -65,7 +65,7 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         except requests.exceptions.RequestException as retry_exception:
             logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
 
-async def stream_chat_completion(thread_id, asst_id, user_message, total_tokens, retries=3):
+async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0

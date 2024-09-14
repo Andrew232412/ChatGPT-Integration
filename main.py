@@ -99,6 +99,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             messages.append(message_chunk)
 
             total_tokens = response.usage['total_tokens'] if 'usage' in response else 0
+            print(f"Total tokens spent: {total_tokens}")
 
             return ''.join(messages), None, total_tokens
         

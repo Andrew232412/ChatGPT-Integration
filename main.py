@@ -18,6 +18,8 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
+TOKEN_LIMIT = 4096
+
 class ChatRequest(BaseModel):
     thread_id: str
     asst_id: str
@@ -72,6 +74,12 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     while attempt < retries:
         attempt += 1
         try:
+            # Проверка существования thread_id
+            try:
+                response_check = openai.beta.threads.retrieve(thread_id=thread_id)
+            except openai.error.InvalidRequestError:
+                raise ValueError("Thread ID does not exist")
+
             response = openai.beta.threads.runs.create(
                 thread_id=thread_id,
                 assistant_id=asst_id,
@@ -83,6 +91,8 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             )
 
             total_tokens = response['usage']['total_tokens']
+            if total_tokens > TOKEN_LIMIT:
+                raise ValueError(f"Token limit exceeded: {total_tokens} tokens used, limit is {TOKEN_LIMIT}")
 
             while response.status != "completed":
                 response = openai.beta.threads.runs.retrieve(

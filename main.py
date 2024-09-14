@@ -82,8 +82,19 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 ],
                 model="gpt-4o-mini",
                 timeout=30,
-                include_usage=True
+                max_prompt_tokens=4096,
+                max_completion_tokens=4096
             )
+
+            if response['usage']['prompt_tokens'] > 4096:
+                error_message = f"Prompt tokens exceeded limit: {response['usage']['prompt_tokens']} tokens used."
+                logger.error(error_message)
+                return '', error_message
+
+            if response['usage']['completion_tokens'] > 4096:
+                error_message = f"Completion tokens exceeded limit: {response['usage']['completion_tokens']} tokens used."
+                logger.error(error_message)
+                return '', error_message
 
             while response.status != "completed":
                 response = openai.beta.threads.runs.retrieve(
@@ -94,9 +105,6 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             message_response = openai.beta.threads.messages.list(thread_id=thread_id)
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
-            
-            logger.info(f"📋 Full response: {response}")
-
             return ''.join(messages), None
         
         except Exception as e:

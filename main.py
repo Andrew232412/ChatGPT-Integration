@@ -86,16 +86,6 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 max_completion_tokens=4096
             )
 
-            if response['usage']['prompt_tokens'] > 4096:
-                error_message = f"Prompt tokens exceeded limit: {response['usage']['prompt_tokens']} tokens used."
-                logger.error(error_message)
-                return '', error_message
-
-            if response['usage']['completion_tokens'] > 4096:
-                error_message = f"Completion tokens exceeded limit: {response['usage']['completion_tokens']} tokens used."
-                logger.error(error_message)
-                return '', error_message
-
             while response.status != "completed":
                 response = openai.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response.id

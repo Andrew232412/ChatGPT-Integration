@@ -100,14 +100,14 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
 
             if hasattr(response, 'usage'):
                 usage_data = response.usage
-                prompt_tokens = usage_data.get('prompt_tokens', 0)
-                completion_tokens = usage_data.get('completion_tokens', 0)
-                total_tokens = usage_data.get('total_tokens', 0)
+                prompt_tokens = usage_data('prompt_tokens', 0)
+                completion_tokens = usage_data('completion_tokens', 0)
+                total_tokens = usage_data('total_tokens', 0)
             else:
                 prompt_tokens = 0
                 completion_tokens = 0
                 total_tokens = 0         
-                   
+
             print(f"Total tokens spent: {total_tokens}")
 
             return ''.join(messages), None, 0

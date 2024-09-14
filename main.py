@@ -86,7 +86,6 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 ],
                 model="gpt-4o-mini",
                 timeout=30,
-                # max_completion_tokens=4096 
             )
 
             while response.status != "completed":

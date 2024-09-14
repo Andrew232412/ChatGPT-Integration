@@ -92,8 +92,9 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 model="gpt-4o-mini",
                 timeout=30
             )
-
-            total_tokens = response.usage.total_tokens
+            print(response['usage']['total_tokens'])
+            total_tokens = response['usage'].get('total_tokens', 0) if 'usage' in response else 0
+            
 
             while response.status != "completed":
                 response = openai.beta.threads.runs.retrieve(

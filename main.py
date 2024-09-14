@@ -74,10 +74,9 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     while attempt < retries:
         attempt += 1
         try:
-            # Проверка существования thread_id
             try:
-                response_check = openai.beta.threads.retrieve(thread_id=thread_id)
-            except openai.error.InvalidRequestError:
+                openai.beta.threads.retrieve(thread_id=thread_id)
+            except openai.BadRequestError:
                 raise ValueError("Thread ID does not exist")
 
             response = openai.beta.threads.runs.create(

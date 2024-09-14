@@ -53,7 +53,7 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
             "open_ai_text": "",
             "open_ai_status": "error",
             "open_ai_error": f"Callback failed due to: {e}",
-             "total_tokens": total_tokens
+            "total_tokens": total_tokens
         }
         
         try:
@@ -105,7 +105,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retries})")
                 await asyncio.sleep(0.5)
             else:
-                return '', str(e)
+                return '', str(e), total_tokens
 
 @app.post("/")
 async def chat_endpoint(req: ChatRequest):

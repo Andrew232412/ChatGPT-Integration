@@ -98,7 +98,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
 
-            total_tokens = response['usage']['total_tokens']
+            total_tokens = response.usage['total_tokens']
 
             return ''.join(messages), None, total_tokens
         

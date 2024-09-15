@@ -88,7 +88,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
         try:
             logger.info(f"🚀 Streaming attempt {attempt}/{retries} for thread {thread_id}, message: {init_message}")
             try:
-                response = openai.beta.threads.runs.create(
+                response_run_create = openai.beta.threads.runs.create(
                     thread_id=thread_id,
                     assistant_id=asst_id,
                     additional_messages=[
@@ -105,19 +105,19 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
 
             start_time = asyncio.get_event_loop().time()
 
-            while response.status != "completed":
+            while response_run_create.status != "completed":
                 elapsed_time = asyncio.get_event_loop().time() - start_time
                 if elapsed_time > timeout_limit:
                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
                     return '', "Timeout exceeded", None
 
-                response = openai.beta.threads.runs.retrieve(
-                    thread_id=thread_id, run_id=response.id
+                response_retrieve = openai.beta.threads.runs.retrieve(
+                    thread_id=thread_id, run_id=response_run_create.id
                 )
-                logger.info(f"🔄 Polling for completion... (status: {response.status})")
+                logger.info(f"🔄 Polling for completion... (status: {response_retrieve.status})")
                 await asyncio.sleep(1)
 
-            if response.status == "completed":
+            if response_retrieve.status == "completed":
                 message_response = openai.beta.threads.messages.list(thread_id=thread_id)
                 message_chunk = message_response.data[0].content[0].text.value.strip()
                 messages.append(message_chunk)

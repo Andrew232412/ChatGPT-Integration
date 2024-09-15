@@ -146,6 +146,12 @@ async def process_request(req: ChatRequest):
     try:
         gpt_response, error, usage_info = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
+        if gpt_response is None or gpt_response.strip() == '':
+            logger.error("⛔ No valid response from GPT, cannot send empty message.")
+            error = error or "No valid response from GPT"
+            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text, usage_info)
+            return
+
         callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
         if gpt_response:

@@ -139,7 +139,7 @@ async def chat_endpoint(req: ChatRequest):
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
         raise HTTPException(status_code=400, detail="thread_id must be provided")
 
-    asyncio.create_task(process_request(req))
+    await asyncio.create_task(process_request(req))
     return {"status": "ok", "message": "Processing started"}
 
 async def process_request(req: ChatRequest):

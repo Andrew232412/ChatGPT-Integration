@@ -75,13 +75,13 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     
     if token_count > 4096:
         logger.error(f"⚠️ Message too long, exceeds token limit: {token_count} tokens.")
-        return '', f"Message exceeds token limit: {token_count} tokens."
+        return '', f"Message exceeds token limit: {token_count} tokens.", None
 
     try:
         openai.beta.threads.retrieve(thread_id=thread_id)
     except Exception as e:
         logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
-        return '', f"No thread found with id {thread_id}"
+        return '', f"No thread found with id {thread_id}", None
 
     while attempt < retries:
         attempt += 1
@@ -104,7 +104,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 elapsed_time = asyncio.get_event_loop().time() - start_time
                 if elapsed_time > timeout_limit:
                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
-                    break
+                    return '', "Timeout exceeded", None
 
                 response = openai.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response.id

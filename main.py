@@ -6,6 +6,7 @@ import logging
 from dotenv import load_dotenv
 import os
 import asyncio
+import tiktoken
 
 load_dotenv()
 GPT_TOKEN = os.getenv('GPT_TOKEN')
@@ -26,7 +27,11 @@ class ChatRequest(BaseModel):
     message: str
     callback_text: str
 
-async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text):
+def count_tokens(text: str) -> int:
+    tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
+    return len(tokenizer.encode(text))
+
+async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text, usage_info=None):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -36,7 +41,8 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         "client_id": client_id,
         "open_ai_text": open_ai_text,
         "open_ai_status": open_ai_status,
-        "open_ai_error": open_ai_error
+        "open_ai_error": open_ai_error,
+        "usage_info": usage_info
     }
     logger.info(f"Sending data to callback URL: {callback_url}")
     try:
@@ -65,6 +71,12 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
+    token_count = count_tokens(user_message)
+    
+    if token_count > 4096:
+        logger.error(f"⚠️ Message too long, exceeds token limit: {token_count} tokens.")
+        return '', f"Message exceeds token limit: {token_count} tokens."
+
     try:
         openai.beta.threads.retrieve(thread_id=thread_id)
     except Exception as e:
@@ -95,7 +107,18 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             message_response = openai.beta.threads.messages.list(thread_id=thread_id)
             message_chunk = message_response.data[0].content[0].text.value.strip()
             messages.append(message_chunk)
-            return ''.join(messages), None
+
+            total_token_usage = count_tokens(user_message) + count_tokens(''.join(messages))
+
+            logger.info(f"📋 Full response: {response}")
+
+            usage_info = {
+                "prompt_tokens": count_tokens(user_message),
+                "completion_tokens": count_tokens(''.join(messages)),
+                "total_tokens": total_token_usage
+            }
+
+            return ''.join(messages), None, usage_info
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
@@ -103,7 +126,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retries})")
                 await asyncio.sleep(0.5)
             else:
-                return '', str(e)
+                return '', str(e), None
 
 @app.post("/")
 async def chat_endpoint(req: ChatRequest):
@@ -116,14 +139,14 @@ async def chat_endpoint(req: ChatRequest):
 
 async def process_request(req: ChatRequest):
     try:
-        gpt_response, error = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
+        gpt_response, error, usage_info = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
         callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
         if gpt_response:
-            await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text)
+            await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text, usage_info)
         else:
-            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text)
+            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text, usage_info)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 

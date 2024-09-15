@@ -109,10 +109,9 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
             messages.append(message_chunk)
 
             total_token_usage = count_tokens(user_message) + count_tokens(''.join(messages))
-
-            logger.info(f"📋 Full response: {response}")
-
             usage_info = {
+                "prompt_tokens": count_tokens(user_message),
+                "completion_tokens": count_tokens(''.join(messages)),
                 "total_tokens": total_token_usage
             }
 

@@ -46,7 +46,7 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
     }
     logger.info(f"Sending data to callback URL: {callback_url}")
     try:
-        response = requests.post(callback_url, json=data, headers=headers, timeout=30)
+        response = requests.post(callback_url, json=data, headers=headers, timeout=60)
         response.raise_for_status()
         logger.info(f"✅ Callback sent successfully to {callback_url}")
     except requests.exceptions.RequestException as e:
@@ -61,7 +61,7 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         }
         
         try:
-            error_response = requests.post(callback_url, json=error_data, headers=headers, timeout=30)
+            error_response = requests.post(callback_url, json=error_data, headers=headers, timeout=60)
             error_response.raise_for_status()
             logger.info(f"✅ Error callback sent successfully to {callback_url}")
         except requests.exceptions.RequestException as retry_exception:
@@ -93,7 +93,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                     {"role": "user", "content": user_message}
                 ],
                 model="gpt-4o-mini",
-                timeout=30,
+                timeout=60,
                 max_prompt_tokens=4096,
                 max_completion_tokens=4096
             )

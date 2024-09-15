@@ -67,7 +67,7 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         except requests.exceptions.RequestException as retry_exception:
             logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
 
-async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
+async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, timeout_limit=30):
     openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
@@ -98,24 +98,32 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3):
                 max_completion_tokens=4096
             )
 
+            start_time = asyncio.get_event_loop().time()
+
             while response.status != "completed":
+                elapsed_time = asyncio.get_event_loop().time() - start_time
+                if elapsed_time > timeout_limit:
+                    logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
+                    break
+
                 response = openai.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response.id
                 )
                 await asyncio.sleep(1)
             
-            message_response = openai.beta.threads.messages.list(thread_id=thread_id)
-            message_chunk = message_response.data[0].content[0].text.value.strip()
-            messages.append(message_chunk)
+            if response.status == "completed":
+                message_response = openai.beta.threads.messages.list(thread_id=thread_id)
+                message_chunk = message_response.data[0].content[0].text.value.strip()
+                messages.append(message_chunk)
 
-            total_token_usage = count_tokens(user_message) + count_tokens(''.join(messages))
-            usage_info = {
-                "prompt_tokens": count_tokens(user_message),
-                "completion_tokens": count_tokens(''.join(messages)),
-                "total_tokens": total_token_usage
-            }
+                total_token_usage = count_tokens(user_message) + count_tokens(''.join(messages))
+                usage_info = {
+                    "prompt_tokens": count_tokens(user_message),
+                    "completion_tokens": count_tokens(''.join(messages)),
+                    "total_tokens": total_token_usage
+                }
 
-            return ''.join(messages), None, usage_info
+                return ''.join(messages), None, usage_info
         
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")

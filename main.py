@@ -75,6 +75,7 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
 async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, timeout_limit=30):
     messages = []
     attempt = 0
+    init_message = user_message
 
     try:
         openai.beta.threads.retrieve(thread_id=thread_id)
@@ -85,13 +86,13 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     while attempt < retries:
         attempt += 1
         try:
-            logger.info(f"🚀 Streaming attempt {attempt}/{retries} for thread {thread_id}")
+            logger.info(f"🚀 Streaming attempt {attempt}/{retries} for thread {thread_id}, message: {init_message}")
             try:
                 response = openai.beta.threads.runs.create(
                     thread_id=thread_id,
                     assistant_id=asst_id,
                     additional_messages=[
-                        {"role": "user", "content": user_message}
+                        {"role": "user", "content": init_message}
                     ],
                     model="gpt-4o-mini",
                     timeout=60,
@@ -121,9 +122,9 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 message_chunk = message_response.data[0].content[0].text.value.strip()
                 messages.append(message_chunk)
 
-                total_token_usage = count_tokens(user_message) + count_tokens(''.join(messages))
+                total_token_usage = count_tokens(init_message) + count_tokens(''.join(messages))
                 usage_info = {
-                    "prompt_tokens": count_tokens(user_message),
+                    "prompt_tokens": count_tokens(init_message),
                     "completion_tokens": count_tokens(''.join(messages)),
                     "total_tokens": total_token_usage
                 }

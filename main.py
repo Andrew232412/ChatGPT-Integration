@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
+openai.api_key = GPT_TOKEN
+
 
 class ChatRequest(BaseModel):
     thread_id: str
@@ -27,9 +29,11 @@ class ChatRequest(BaseModel):
     message: str
     callback_text: str
 
+
 def count_tokens(text: str) -> int:
     tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
     return len(tokenizer.encode(text))
+
 
 async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text, usage_info=None):
     headers = {
@@ -53,13 +57,13 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         logger.error(f"❌ Failed to send callback: {e}")
 
         error_data = {
-            "message": callback_text, 
+            "message": callback_text,
             "client_id": client_id,
             "open_ai_text": "",
             "open_ai_status": "error",
             "open_ai_error": f"Callback failed due to: {e}"
         }
-        
+
         try:
             error_response = requests.post(callback_url, json=error_data, headers=headers, timeout=60)
             error_response.raise_for_status()
@@ -67,15 +71,10 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         except requests.exceptions.RequestException as retry_exception:
             logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
 
+
 async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, timeout_limit=30):
-    openai.api_key = GPT_TOKEN
     messages = []
     attempt = 0
-    token_count = count_tokens(user_message)
-    
-    if token_count > 4096:
-        logger.error(f"⚠️ Message too long, exceeds token limit: {token_count} tokens.")
-        return '', f"Message exceeds token limit: {token_count} tokens.", None
 
     try:
         openai.beta.threads.retrieve(thread_id=thread_id)
@@ -86,17 +85,22 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     while attempt < retries:
         attempt += 1
         try:
-            response = openai.beta.threads.runs.create(
-                thread_id=thread_id,
-                assistant_id=asst_id,
-                additional_messages=[
-                    {"role": "user", "content": user_message}
-                ],
-                model="gpt-4o-mini",
-                timeout=60,
-                max_prompt_tokens=4096,
-                max_completion_tokens=4096
-            )
+            logger.info(f"🚀 Streaming attempt {attempt}/{retries} for thread {thread_id}")
+            try:
+                response = openai.beta.threads.runs.create(
+                    thread_id=thread_id,
+                    assistant_id=asst_id,
+                    additional_messages=[
+                        {"role": "user", "content": user_message}
+                    ],
+                    model="gpt-4o-mini",
+                    timeout=60,
+                    max_prompt_tokens=4096,
+                    max_completion_tokens=4096
+                )
+            except Exception as exc:
+                logger.error(f"❌ Error during openai.beta.threads.runs.create attempt {attempt}: {exc}")
+                return '', str(exc), None
 
             start_time = asyncio.get_event_loop().time()
 
@@ -109,8 +113,9 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 response = openai.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response.id
                 )
+                logger.info(f"🔄 Polling for completion... (status: {response.status})")
                 await asyncio.sleep(1)
-            
+
             if response.status == "completed":
                 message_response = openai.beta.threads.messages.list(thread_id=thread_id)
                 message_chunk = message_response.data[0].content[0].text.value.strip()
@@ -124,7 +129,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 }
 
                 return ''.join(messages), None, usage_info
-        
+
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
             if attempt < retries:
@@ -133,26 +138,34 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
             else:
                 return '', str(e), None
 
+
 @app.post("/")
 async def chat_endpoint(req: ChatRequest):
     if not req.thread_id:
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
         raise HTTPException(status_code=400, detail="thread_id must be provided")
 
+    token_count = count_tokens(req.message)
+
+    if token_count > 4096:
+        logger.error(f"⚠️ Message too long, exceeds token limit: {token_count} tokens.")
+        raise HTTPException(status_code=400, detail=f"Message exceeds token limit: {token_count} tokens.")
+
     await asyncio.create_task(process_request(req))
     return {"status": "ok", "message": "Processing started"}
+
 
 async def process_request(req: ChatRequest):
     try:
         gpt_response, error, usage_info = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
+
+        callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
         if gpt_response is None or gpt_response.strip() == '':
             logger.error("⛔ No valid response from GPT, cannot send empty message.")
             error = error or "No valid response from GPT"
             await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text, usage_info)
             return
-
-        callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
         if gpt_response:
             await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text, usage_info)
@@ -164,4 +177,5 @@ async def process_request(req: ChatRequest):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -141,6 +141,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
 
 @app.post("/")
 async def chat_endpoint(req: ChatRequest):
+    logger.info("Received chat request: %s", req.dict())
     if not req.thread_id:
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
         raise HTTPException(status_code=400, detail="thread_id must be provided")

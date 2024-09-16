@@ -72,7 +72,7 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
             logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
 
 
-async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, timeout_limit=30):
+async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, timeout_limit=60):
     messages = []
     attempt = 0
     init_message = user_message
@@ -109,7 +109,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 elapsed_time = asyncio.get_event_loop().time() - start_time
                 if elapsed_time > timeout_limit:
                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
-                    return '', "Timeout exceeded", None
+                    raise TimeoutError
 
                 response_retrieve = openai.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response_run_create.id

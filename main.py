@@ -6,7 +6,7 @@ import logging
 from dotenv import load_dotenv
 import os
 import asyncio
-# import tiktoken
+import time 
 
 load_dotenv()
 GPT_TOKEN = os.getenv('GPT_TOKEN')
@@ -30,12 +30,7 @@ class ChatRequest(BaseModel):
     callback_text: str
 
 
-# def count_tokens(text: str) -> int:
-#     tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
-#     return len(tokenizer.encode(text))
-
-
-async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text): #  usage_info=None
+async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_status, open_ai_error, callback_text):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -45,8 +40,7 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         "client_id": client_id,
         "open_ai_text": open_ai_text,
         "open_ai_status": open_ai_status,
-        "open_ai_error": open_ai_error,
-        # "usage_info": usage_info
+        "open_ai_error": open_ai_error
     }
     logger.info(f"Sending data to callback URL: {callback_url}")
     try:
@@ -76,6 +70,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     messages = []
     attempt = 0
     init_message = user_message
+    start_time = time.time()
 
     try:
         openai.beta.threads.retrieve(thread_id=thread_id)
@@ -86,7 +81,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     while attempt < retries:
         attempt += 1
         try:
-            logger.info(f"🚀 Streaming attempt {attempt}/{retries} for thread {thread_id}, message: {init_message}")
+            logger.info(f"🚀 Attempt {attempt}/{retries} for thread {thread_id}, message: {init_message}")
             try:
                 response_run_create = openai.beta.threads.runs.create(
                     thread_id=thread_id,
@@ -96,17 +91,13 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                     ],
                     model="gpt-4o-mini",
                     timeout=60,
-                    # max_prompt_tokens=4096,
-                    # max_completion_tokens=4096
                 )
             except Exception as exc:
                 logger.error(f"❌ Error during openai.beta.threads.runs.create attempt {attempt}: {exc}")
                 return '', str(exc), None
 
-            start_time = asyncio.get_event_loop().time()
-
             while response_run_create.status != "completed":
-                elapsed_time = asyncio.get_event_loop().time() - start_time
+                elapsed_time = time.time() - start_time
                 if elapsed_time > timeout_limit:
                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
                     raise TimeoutError
@@ -124,14 +115,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 message_chunk = message_response.data[0].content[0].text.value.strip()
                 messages.append(message_chunk)
 
-                # total_token_usage = count_tokens(init_message) + count_tokens(''.join(messages))
-                # usage_info = {
-                #     "prompt_tokens": count_tokens(init_message),
-                #     "completion_tokens": count_tokens(''.join(messages)),
-                #     "total_tokens": total_token_usage
-                # }
-
-                return ''.join(messages), None, # usage_info
+                return ''.join(messages), None
 
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
@@ -149,34 +133,34 @@ async def chat_endpoint(req: ChatRequest):
         logger.error("⚠️ No thread_id provided. Cannot proceed without a thread.")
         raise HTTPException(status_code=400, detail="thread_id must be provided")
 
-    # token_count = count_tokens(req.message)
-
-    # if token_count > 4096:
-    #     logger.error(f"⚠️ Message too long, exceeds token limit: {token_count} tokens.")
-    #     raise HTTPException(status_code=400, detail=f"Message exceeds token limit: {token_count} tokens.")
-
     asyncio.create_task(process_request(req))
     return {"status": "ok", "message": "Processing started"}
 
 
 async def process_request(req: ChatRequest):
     try:
-        gpt_response, error = await stream_chat_completion(req.thread_id, req.asst_id, req.message) # gpt_response, error, usage_info
+        logger.info(f"🚀 Processing request for thread_id: {req.thread_id}")
+        gpt_response, error = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
         callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
         if gpt_response is None or gpt_response.strip() == '':
             logger.error("⛔ No valid response from GPT, cannot send empty message.")
             error = error or "No valid response from GPT"
-            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text) # usage_info
+            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text)
             return
 
         if gpt_response:
-            await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text) # usage_info
+            logger.info(f"✅ GPT response: {gpt_response}")
+            await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text)
         else:
-            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text) # usage_info
+            logger.error(f"❌ Error: {error}")
+            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text)
+
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+        await send_callback(f"https://chatter.salebot.pro/api/{req.api_key}/callback", req.api_key, req.client_id, "", "error", str(e), req.callback_text)
+
 
 
 if __name__ == "__main__":

@@ -115,6 +115,8 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                     thread_id=thread_id, run_id=response_run_create.id
                 )
                 logger.info(f"🔄 Polling for completion... (status: {response_retrieve.status})")
+                if response_retrieve.status == "completed":
+                    break
                 await asyncio.sleep(1)
 
             if response_retrieve.status == "completed":

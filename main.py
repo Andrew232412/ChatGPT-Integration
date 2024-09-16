@@ -155,7 +155,7 @@ async def chat_endpoint(req: ChatRequest):
     #     logger.error(f"⚠️ Message too long, exceeds token limit: {token_count} tokens.")
     #     raise HTTPException(status_code=400, detail=f"Message exceeds token limit: {token_count} tokens.")
 
-    await asyncio.create_task(process_request(req))
+    asyncio.create_task(process_request(req))
     return {"status": "ok", "message": "Processing started"}
 
 

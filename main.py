@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import os
 import asyncio
 import time 
+import httpx
 
 load_dotenv()
 GPT_TOKEN = os.getenv('GPT_TOKEN')
@@ -20,6 +21,7 @@ logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 openai.api_key = GPT_TOKEN
 
+client = AsyncOpenAI(api_key=GPT_TOKEN, httpx_client=httpx.AsyncClient())
 
 class ChatRequest(BaseModel):
     thread_id: str
@@ -73,7 +75,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     start_time = time.time()
 
     try:
-        await openai.beta.threads.aretrieve(thread_id=thread_id)
+        await client.threads.retrieve(thread_id=thread_id)
     except Exception as e:
         logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
         return '', f"No thread found with id {thread_id}", None
@@ -83,7 +85,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
         try:
             logger.info(f"🚀 Attempt {attempt}/{retries} for thread {thread_id}, message: {init_message}")
             try:
-                response_run_create = await openai.beta.threads.runs.create(
+                response_run_create = await client.chat.completions.create(
                     thread_id=thread_id,
                     assistant_id=asst_id,
                     additional_messages=[

@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 import os
 import asyncio
 import time 
-import httpx
 
 load_dotenv()
 GPT_TOKEN = os.getenv('GPT_TOKEN')
@@ -22,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 openai.api_key = GPT_TOKEN
 
-client = AsyncOpenAI(api_key=GPT_TOKEN, httpx_client=httpx.AsyncClient())
+client = AsyncOpenAI(api_key=GPT_TOKEN)
 
 class ChatRequest(BaseModel):
     thread_id: str

@@ -102,7 +102,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
                     raise TimeoutError
 
-                response_retrieve = await openai.beta.threads.runs.retrieve(
+                response_retrieve = await asyncio.to_thread(openai.beta.threads.runs.retrieve,
                     thread_id=thread_id, run_id=response_run_create.id
                 )
                 logger.info(f"🔄 Polling for completion... (status: {response_retrieve.status})")
@@ -111,7 +111,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 await asyncio.sleep(1)
 
             if response_retrieve.status == "completed":
-                message_response = await openai.beta.threads.messages.list(thread_id=thread_id)
+                message_response = await asyncio.to_thread(openai.beta.threads.messages.list,thread_id=thread_id)
                 message_chunk = message_response.data[0].content[0].text.value.strip()
                 messages.append(message_chunk)
 

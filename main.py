@@ -73,7 +73,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     start_time = time.time()
 
     try:
-        openai.beta.threads.retrieve(thread_id=thread_id)
+        await openai.beta.threads.retrieve(thread_id=thread_id)
     except Exception as e:
         logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
         return '', f"No thread found with id {thread_id}", None
@@ -83,7 +83,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
         try:
             logger.info(f"🚀 Attempt {attempt}/{retries} for thread {thread_id}, message: {init_message}")
             try:
-                response_run_create = openai.beta.threads.runs.create(
+                response_run_create = await openai.beta.threads.runs.create(
                     thread_id=thread_id,
                     assistant_id=asst_id,
                     additional_messages=[
@@ -102,7 +102,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
                     raise TimeoutError
 
-                response_retrieve = openai.beta.threads.runs.retrieve(
+                response_retrieve = await openai.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response_run_create.id
                 )
                 logger.info(f"🔄 Polling for completion... (status: {response_retrieve.status})")
@@ -111,7 +111,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 await asyncio.sleep(1)
 
             if response_retrieve.status == "completed":
-                message_response = openai.beta.threads.messages.list(thread_id=thread_id)
+                message_response = await openai.beta.threads.messages.list(thread_id=thread_id)
                 message_chunk = message_response.data[0].content[0].text.value.strip()
                 messages.append(message_chunk)
 

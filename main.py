@@ -73,7 +73,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     start_time = time.time()
 
     try:
-        await openai.beta.threads.retrieve(thread_id=thread_id)
+        await openai.beta.threads.aretrieve(thread_id=thread_id)
     except Exception as e:
         logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
         return '', f"No thread found with id {thread_id}", None
@@ -102,7 +102,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
                     raise TimeoutError
 
-                response_retrieve = await openai.beta.threads.runs.retrieve(
+                response_retrieve = await openai.beta.threads.runs.aretrieve(
                     thread_id=thread_id, run_id=response_run_create.id
                 )
                 logger.info(f"🔄 Polling for completion... (status: {response_retrieve.status})")

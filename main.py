@@ -75,7 +75,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
     start_time = time.time()
 
     try:
-        await openai.beta.threads.retrieve(thread_id=thread_id)
+        openai.beta.threads.retrieve(thread_id=thread_id)
     except Exception as e:
         logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
         return '', f"No thread found with id {thread_id}", None

@@ -68,14 +68,15 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
             logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
 
 
-async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, timeout_limit=60):
+async def stream_chat_completion(thread_id: str, asst_id: str, user_message: str, retries: int = 3, timeout_limit: int = 60):
     messages = []
     attempt = 0
     init_message = user_message
     start_time = time.time()
 
+    # Check if the thread exists
     try:
-        openai.beta.threads.retrieve(thread_id=thread_id)
+        await client.beta.threads.retrieve(thread_id=thread_id)
     except Exception as e:
         logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
         return '', f"No thread found with id {thread_id}", None
@@ -85,7 +86,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
         try:
             logger.info(f"🚀 Attempt {attempt}/{retries} for thread {thread_id}, message: {init_message}")
             try:
-                response_run_create = await client.chat.completions.create(
+                response_run_create = await client.beta.threads.runs.create(
                     thread_id=thread_id,
                     assistant_id=asst_id,
                     additional_messages=[
@@ -98,13 +99,13 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 logger.error(f"❌ Error during openai.beta.threads.runs.create attempt {attempt}: {exc}")
                 return '', str(exc), None
 
-            while response_run_create.status != "completed":
+            while True:
                 elapsed_time = time.time() - start_time
                 if elapsed_time > timeout_limit:
                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
                     raise TimeoutError
 
-                response_retrieve = await openai.beta.threads.runs.aretrieve(
+                response_retrieve = await client.beta.threads.runs.retrieve(
                     thread_id=thread_id, run_id=response_run_create.id
                 )
                 logger.info(f"🔄 Polling for completion... (status: {response_retrieve.status})")
@@ -113,7 +114,7 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 await asyncio.sleep(1)
 
             if response_retrieve.status == "completed":
-                message_response = await openai.beta.threads.messages.list(thread_id=thread_id)
+                message_response = await client.beta.threads.messages.list(thread_id=thread_id)
                 message_chunk = message_response.data[0].content[0].text.value.strip()
                 messages.append(message_chunk)
 
@@ -126,6 +127,8 @@ async def stream_chat_completion(thread_id, asst_id, user_message, retries=3, ti
                 await asyncio.sleep(0.5)
             else:
                 return '', str(e), None
+
+    return '', 'Max retries exceeded', None
 
 
 @app.post("/")

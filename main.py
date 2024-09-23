@@ -79,7 +79,7 @@ async def stream_chat_completion(thread_id: str, asst_id: str, user_message: str
         await client.beta.threads.retrieve(thread_id=thread_id)
     except Exception as e:
         logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
-        return '', f"No thread found with id {thread_id}"
+        return '', f"No thread found with id {thread_id}", None
 
     while attempt < retries:
         attempt += 1
@@ -97,7 +97,7 @@ async def stream_chat_completion(thread_id: str, asst_id: str, user_message: str
                 )
             except Exception as exc:
                 logger.error(f"❌ Error during openai.beta.threads.runs.create attempt {attempt}: {exc}")
-                return '', str(exc)
+                return '', str(exc), None
 
             while True:
                 elapsed_time = time.time() - start_time
@@ -118,7 +118,7 @@ async def stream_chat_completion(thread_id: str, asst_id: str, user_message: str
                 message_chunk = message_response.data[0].content[0].text.value.strip()
                 messages.append(message_chunk)
 
-                return ''.join(messages)
+                return ''.join(messages), None
 
         except Exception as e:
             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
@@ -126,9 +126,9 @@ async def stream_chat_completion(thread_id: str, asst_id: str, user_message: str
                 logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retries})")
                 await asyncio.sleep(0.5)
             else:
-                return '', str(e)
+                return '', str(e), None
 
-    return '', 'Max retries exceeded'
+    return '', 'Max retries exceeded', None
 
 
 @app.post("/")

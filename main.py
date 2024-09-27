@@ -44,7 +44,6 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         "open_ai_status": open_ai_status,
         "open_ai_error": open_ai_error
     }
-    logger.info(f"Sending data to callback URL: {callback_url}")
     try:
         response = requests.post(callback_url, json=data, headers=headers, timeout=60)
         response.raise_for_status()

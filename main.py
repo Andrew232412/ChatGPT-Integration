@@ -68,68 +68,6 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
         except requests.exceptions.RequestException as retry_exception:
             logger.error(f"❌ Failed to send error callback after retry: {retry_exception}")
 
-# async def stream_chat_completion(thread_id: str, asst_id: str, user_message: str, retries: int = 3, timeout_limit: int = 60):
-#     messages = []
-#     attempt = 0
-#     init_message = user_message
-#     start_time = time.time()
-
-#     # Check if the thread exists
-#     try:
-#         await client.beta.threads.retrieve(thread_id=thread_id)
-#     except Exception as e:
-#         logger.error(f"❌ Error: No thread found with id {thread_id}. Details: {e}")
-#         return '', f"No thread found with id {thread_id}"
-
-#     while attempt < retries:
-#         attempt += 1
-#         try:
-#             logger.info(f"🚀 Attempt {attempt}/{retries} for thread {thread_id}, message: {init_message}")
-#             try:
-#                 response_run_create = await client.beta.threads.runs.create(
-#                     thread_id=thread_id,
-#                     assistant_id=asst_id,
-#                     additional_messages=[
-#                         {"role": "user", "content": init_message}
-#                     ],
-#                     model="gpt-4o-mini",
-#                     timeout=60,
-#                 )
-#             except Exception as exc:
-#                 logger.error(f"❌ Error during openai.beta.threads.runs.create attempt {attempt}: {exc}")
-#                 return '', str(exc)
-
-#             while True:
-#                 elapsed_time = time.time() - start_time
-#                 if elapsed_time > timeout_limit:
-#                     logger.error(f"⏳ Timeout reached: {elapsed_time:.2f} seconds. Retrying...")
-#                     raise TimeoutError
-
-#                 response_retrieve = await client.beta.threads.runs.retrieve(
-#                     thread_id=thread_id, run_id=response_run_create.id
-#                 )
-#                 logger.info(f"🔄 Polling for completion... (status: {response_retrieve.status})")
-#                 if response_retrieve.status == "completed":
-#                     break
-#                 await asyncio.sleep(1)
-
-#             if response_retrieve.status == "completed":
-#                 message_response = await client.beta.threads.messages.list(thread_id=thread_id)
-#                 message_chunk = message_response.data[0].content[0].text.value.strip()
-#                 messages.append(message_chunk)
-
-#                 return ''.join(messages), None
-
-#         except Exception as e:
-#             logger.error(f"❌ Error during streaming attempt {attempt}: {e}")
-#             if attempt < retries:
-#                 logger.info(f"🔄 Retrying... (attempt {attempt + 1}/{retries})")
-#                 await asyncio.sleep(0.5)
-#             else:
-#                 return '', str(e)
-
-#     return '', 'Max retries exceeded'
-
 
 async def stream_chat_completion(thread_id: str, asst_id: str, user_message: str, retries: int = 3, timeout_limit: int = 60):
     messages = []

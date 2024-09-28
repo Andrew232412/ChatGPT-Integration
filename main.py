@@ -40,10 +40,17 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
     data = {
         "message": callback_text,
         "client_id": client_id,
-        "open_ai_text": open_ai_text,
-        "open_ai_status": open_ai_status,
-        "open_ai_error": open_ai_error
+        "open_ai_status": open_ai_status
     }
+
+    # If we have a response from ChatGPT, we send it in the callback
+    if open_ai_text:
+        data["open_ai_text"] = open_ai_text
+    
+    # If an error occurs, we send it to the callback
+    if open_ai_error:
+        data["open_ai_error"] = open_ai_error
+
     try:
         response = requests.post(callback_url, json=data, headers=headers, timeout=60)
         response.raise_for_status()
@@ -51,10 +58,10 @@ async def send_callback(callback_url, api_key, client_id, open_ai_text, open_ai_
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Failed to send callback: {e}")
 
+        # If the callback is not sent, try to resend with error information
         error_data = {
             "message": callback_text,
             "client_id": client_id,
-            "open_ai_text": "ChatGPT did not return a valid response",
             "open_ai_status": "error",
             "open_ai_error": f"Callback failed due to: {e}"
         }
@@ -144,26 +151,26 @@ async def chat_endpoint(req: ChatRequest):
 async def process_request(req: ChatRequest):
     try:
         logger.info(f"🚀 Processing request for thread_id: {req.thread_id}")
-        gpt_response, error = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
+        gpt_response, open_ai_error = await stream_chat_completion(req.thread_id, req.asst_id, req.message)
 
         callback_url = f"https://chatter.salebot.pro/api/{req.api_key}/callback"
 
         if gpt_response is None or gpt_response.strip() == '':
             logger.error("⛔ No valid response from GPT, cannot send empty message.")
-            error = error or "No valid response from GPT"
-            await send_callback(callback_url, req.api_key, req.client_id, "ChatGPT did not return a valid response", "error", error, req.callback_text)
+            open_ai_error = open_ai_error or "No valid response from GPT"
+            await send_callback(callback_url, req.api_key, req.client_id, "ChatGPT did not return a valid response", "error", open_ai_error, req.callback_text)
             return
 
         if gpt_response:
             logger.info(f"✅ GPT response: {gpt_response}")
-            await send_callback(callback_url, req.api_key, req.client_id, gpt_response, "ok", "", req.callback_text)
+            await send_callback(callback_url, req.api_key, req.client_id, open_ai_text=gpt_response, open_ai_status="ok", callback_text=req.callback_text)
         else:
-            logger.error(f"❌ Error: {error}")
-            await send_callback(callback_url, req.api_key, req.client_id, "", "error", error, req.callback_text)
+            logger.error(f"❌ Error: {open_ai_error}")
+            await send_callback(callback_url, req.api_key, req.client_id, open_ai_status="error", open_ai_error=open_ai_error, callback_text=req.callback_text)
 
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        await send_callback(f"https://chatter.salebot.pro/api/{req.api_key}/callback", req.api_key, req.client_id, "", "error", str(e), req.callback_text)
+        await send_callback(f"https://chatter.salebot.pro/api/{req.api_key}/callback", req.api_key, req.client_id, open_ai_status="error", open_ai_error=str(e), callback_text=req.callback_text)
 
 
 
